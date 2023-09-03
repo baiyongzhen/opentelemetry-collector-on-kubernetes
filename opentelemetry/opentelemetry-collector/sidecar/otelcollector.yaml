@@ -16,6 +16,19 @@ spec:
           http:
     exporters:
       logging:
+      # metrics
+      prometheusremotewrite:
+        endpoint: http://192.168.56.161:9090/api/v1/write
+      # traces
+      otlp/tempo:
+        endpoint: http://192.168.56.161:4317
+        tls:
+          insecure: true
+          insecure_skip_verify: true
+      # opentelemetry-collector:0.83.0: error decoding 'exporters': unknown type: "loki" for id
+      # logs
+      #loki:
+      #  endpoint: http://192.168.56.161:3100/loki/api/v1/push      
     processors:
       batch:
 
@@ -24,11 +37,11 @@ spec:
         metrics:
           receivers: [otlp]
           processors: []
-          exporters: [logging]
+          exporters: [logging, prometheusremotewrite]
         traces:
           receivers: [otlp]
           processors: [batch]
-          exporters: [logging]
+          exporters: [logging, otlp/tempo]
         logs:
           receivers: [otlp]
           processors: []
