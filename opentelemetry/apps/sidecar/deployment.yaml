@@ -7,7 +7,7 @@ spec:
   selector:
     matchLabels:
       app: otel-golang
-  replicas: 1 # tells deployment to run 2 pods matching the template
+  replicas: 1
   template:
     metadata:
       labels:
@@ -17,7 +17,6 @@ spec:
         prometheus.io/port:   '8080'
         sidecar.opentelemetry.io/inject: 'sidecar'
     spec:
-      # https://github.com/dzuluaga/kubernetes-multicontainer-nodejs-pod-gke-lab/blob/master/deployment-model-multicontainer-pods.png
       containers:
       - name: app-a
         image: gnu96/opentelemetry-go:latest
