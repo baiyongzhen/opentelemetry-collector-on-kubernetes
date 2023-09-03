@@ -8,6 +8,15 @@ metadata:
     component: otel-collector
 spec:
   mode: deployment
+  autoscaler:
+    minReplicas: 2
+    maxReplicas: 10  
+    behavior:
+      scaleUp:
+        stabilizationWindowSeconds: 10
+      scaleDown:
+        stabilizationWindowSeconds: 15
+    targetCPUUtilization: 70  
   config: |
     receivers:
       otlp:
