@@ -1,0 +1,48 @@
+apiVersion: opentelemetry.io/v1alpha1
+kind: OpenTelemetryCollector
+metadata:
+  name: sidecar
+  namespace: opentelemetry
+spec:
+  mode: sidecar
+  config: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+          http:
+
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: "otel-pro"
+              scrape_interval: 5s
+              static_configs:
+                - targets:
+                  - "localhost:8080"
+
+    processors:
+      batch:
+    exporters:
+      logging:
+      otlp:
+        endpoint: "http://otel-collector-collector.opentelemetry.svc.cluster.local:4317"
+        tls:
+          insecure: true
+    service:
+      telemetry:
+        logs:
+          level: "debug"
+      pipelines:
+        metrics:
+          receivers: [otlp, prometheus]
+          processors: []
+          exporters: [logging, otlp]
+        traces:
+          receivers: [otlp]
+          processors: []
+          exporters: [logging, otlp]
+        logs:
+          receivers: [otlp]
+          processors: []
+          exporters: [logging, otlp]

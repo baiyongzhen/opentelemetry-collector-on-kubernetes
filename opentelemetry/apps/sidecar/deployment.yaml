@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-golang
+  namespace: opentelemetry
+spec:
+  selector:
+    matchLabels:
+      app: otel-golang
+  replicas: 1 # tells deployment to run 2 pods matching the template
+  template:
+    metadata:
+      labels:
+        app: otel-golang
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port:   '8080'
+        sidecar.opentelemetry.io/inject: 'sidecar'
+    spec:
+      # https://github.com/dzuluaga/kubernetes-multicontainer-nodejs-pod-gke-lab/blob/master/deployment-model-multicontainer-pods.png
+      containers:
+      - name: app-a
+        image: gnu96/opentelemetry-go:latest
+        ports:
+          - containerPort: 8080
+        env:
+          - name: APP_NAME
+            value: app-a
+          - name: TARGET_ONE_HOST
+            value: http://localhost:8080/io_task
+          - name: TARGET_TWO_HOST
+            value: http://localhost:8080/cpu_task
+          - name: OTEL_METRICS_EXEMPLAR_FILTER
+            value: TRACE_BASED
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          # The k8s.pod.ip is used to associate pods for k8sattributes
+          - name: OTEL_RESOURCE_ATTRIBUTES
+            value: "k8s.pod.ip=$(POD_IP)"
+          - name: HOST_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+          # The application SDK must use this environment variable in order to successfully
+          # connect to the DaemonSet's collector.
+          - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            #value: "$(POD_IP):4317"
+            value: "localhost:4317"

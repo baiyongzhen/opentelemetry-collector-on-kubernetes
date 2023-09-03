@@ -1,0 +1,141 @@
+apiVersion: opentelemetry.io/v1alpha1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel-collector
+  namespace: opentelemetry
+  labels:
+    app: opentelemetry
+    component: otel-collector
+
+# https://github.com/open-telemetry/opentelemetry-operator/blob/main/docs/api.md#opentelemetrycollector
+spec:
+  # https://github.com/open-telemetry/opentelemetry-operator/blob/main/docs/api.md#opentelemetrycollectorspec
+  # https://github.com/open-telemetry/opentelemetry-operator/blob/main/config/crd/bases/opentelemetry.io_opentelemetrycollectors.yaml
+  # mode: deployment
+  mode: daemonset
+  hostNetwork: true
+  config: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+          http:
+
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: apps
+              # scrape_interval: 5s
+              kubernetes_sd_configs:
+              - role: pod
+              relabel_configs:
+              # scrape pods annotated with "prometheus.io/scrape: true"
+              - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+                regex: "true"
+                action: keep
+              # scrape pods annotated with "prometheus.io/path: /metrics"
+              - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+                action: replace
+                target_label: __metrics_path__
+                regex: (.+)               
+              # read the port from "prometheus.io/port: <port>" annotation and update scraping address accordingly
+              - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+                action: replace
+                target_label: __address__
+                regex: ([^:]+)(?::\d+)?;(\d+)
+                # escaped $1:$2
+                replacement: $$1:$$2
+
+    processors:
+      batch:
+
+    exporters:
+      logging:
+      # metrics
+      prometheusremotewrite:
+        endpoint: http://192.168.56.161:9090/api/v1/write
+      # traces
+      otlp/tempo:
+        endpoint: http://192.168.56.161:4317
+        tls:
+          insecure: true
+          insecure_skip_verify: true
+      # opentelemetry-collector:0.83.0: error decoding 'exporters': unknown type: "loki" for id
+      # logs
+      #loki:
+      #  endpoint: http://192.168.56.161:3100/loki/api/v1/push
+
+    service:
+      pipelines:
+        metrics:
+          receivers: [prometheus]
+          processors: [batch]
+          #exporters: [logging]
+          exporters: [logging, prometheusremotewrite]
+        traces:
+          receivers: [otlp]
+          processors: [batch]
+          #exporters: [logging]
+          exporters: [logging, otlp/tempo]
+        logs:
+          receivers: [otlp]
+          processors: [batch]
+          exporters: [logging]
+  # https://github.com/open-telemetry/opentelemetry-operator/blob/main/docs/api.md#opentelemetrycollectorspecportsindex
+  ports:
+    - name: fluent-tcp
+      port: 8006
+      protocol: TCP
+    - name: fluent-udp
+      port: 8006
+      protocol: UDP
+---
+# https://github.com/lightstep/otel-collector-charts/blob/main/charts/collector-k8s/templates/collector.yaml
+#apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otel-collector
+  namespace: opentelemetry
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - nodes/proxy
+  - nodes/metrics
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["monitoring.coreos.com"]
+  resources:
+  - servicemonitors
+  - podmonitors
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - extensions
+  resources:
+  - ingresses
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs: ["get", "list", "watch"]
+- nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
+  verbs: ["get"]
+---
+#apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otel-collector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: otel-collector
+subjects:
+- kind: ServiceAccount
+  # quirk of the Operator
+  name: otel-collector-collector
+  namespace: opentelemetry
